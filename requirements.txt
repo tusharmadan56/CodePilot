@@ -3,3 +3,4 @@ langchain-google-genai>=4.2,<5
 langchain-core>=1.4.7,<2
 python-dotenv>=1,<2
 typer>=0.12
+pytest>=8,<9
