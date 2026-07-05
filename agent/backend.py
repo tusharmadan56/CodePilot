@@ -7,6 +7,19 @@ from typing import Protocol
 _IGNORED_DIRS = {".git", "node_modules", "__pycache__", "venv", ".venv",
                  ".pytest_cache", ".mypy_cache"}
 
+_MAX_OUTPUT_CHARS = 4000
+
+
+def _truncate(text: str) -> str:
+    if len(text) <= _MAX_OUTPUT_CHARS:
+        return text
+
+    half = _MAX_OUTPUT_CHARS // 2
+    omitted = len(text) - 2 * half
+    head = text[:half]
+    tail = text[-half:]
+    return f"{head}\n... [{omitted} characters truncated] ...\n{tail}"
+
 
 class Backend(Protocol):
     def read_file(self, path: str) -> str: ...
@@ -65,4 +78,5 @@ class LocalBackend:
         if not output:
             output = "(no output)"
 
+        output = _truncate(output)
         return f"$ {cmd}\n{output}\n[exit code: {proc.returncode}]"
