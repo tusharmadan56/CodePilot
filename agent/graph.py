@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agent.backend import Backend
-from agent.llm import build_llm
+from agent.llm import build_llm, invoke_with_retry
 from agent.tools import make_tools
 
 SYSTEM_PROMPT = """You are CodePilot, an autonomous coding agent working in a single project directory through a terminal.
@@ -39,7 +39,7 @@ def build_graph(backend: Backend, max_iters: int = 25):
 
     def call_model(state: AgentState) -> dict:
         messages = [SystemMessage(SYSTEM_PROMPT)] + state["messages"]
-        response = model.invoke(messages)
+        response = invoke_with_retry(model, messages)
         return {"messages": [response], "iterations": state.get("iterations", 0) + 1}
 
     def should_continue(state: AgentState) -> str:
