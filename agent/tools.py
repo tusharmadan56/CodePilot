@@ -21,4 +21,9 @@ def make_tools(backend: Backend):
         """Create or overwrite a file. Missing parent directories are created."""
         return backend.write_file(path, text)
 
-    return [list_files, read_file, write_file]
+    @tool
+    def run_command(cmd: str) -> str:
+        """Run a shell command in the project root. Returns stdout, stderr, and the exit code."""
+        return backend.run_command(cmd)
+
+    return [list_files, read_file, write_file, run_command]
