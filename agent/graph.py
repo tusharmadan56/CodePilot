@@ -2,7 +2,7 @@
 
 from typing import Annotated, TypedDict
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -11,20 +11,41 @@ from agent.backend import Backend
 from agent.llm import build_llm
 from agent.tools import make_tools
 
+SYSTEM_PROMPT = """You are CodePilot, an autonomous coding agent working in a single project directory through a terminal.
+
+Work through every task in this loop:
+1. Understand - use list_files and read_file to learn the project and the relevant code. Never guess a file's contents.
+2. Plan - decide the smallest change that fully solves the task.
+3. Edit - use write_file, preserving the existing style and surrounding code. Change only what the task needs.
+4. Verify - if the project has tests, a build, or a run step, use run_command to check your work. Read the output; if it fails, diagnose, fix, and re-run.
+
+Rules:
+- Base every edit on what you actually read, not on assumptions.
+- Keep changes minimal and focused; don't refactor unrelated code.
+- Work autonomously - don't ask the user for anything your tools can find out.
+- When a command or edit fails, use the error output to correct yourself and try again.
+
+When the task is complete and verified, stop calling tools and reply with a brief summary of what you changed."""
+
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+    iterations: int
 
 
-def build_graph(backend: Backend):
+def build_graph(backend: Backend, max_iters: int = 25):
     tools = make_tools(backend)
     model = build_llm().bind_tools(tools)
 
     def call_model(state: AgentState) -> dict:
-        response = model.invoke(state["messages"])
-        return {"messages": [response]}
+        messages = [SystemMessage(SYSTEM_PROMPT)] + state["messages"]
+        response = model.invoke(messages)
+        return {"messages": [response], "iterations": state.get("iterations", 0) + 1}
 
     def should_continue(state: AgentState) -> str:
+        if state["iterations"] >= max_iters:
+            return "end"
+
         last_message = state["messages"][-1]
         if last_message.tool_calls:
             return "tools"
