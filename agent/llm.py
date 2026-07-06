@@ -7,7 +7,7 @@ import time
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
 
 def build_llm(model: str = DEFAULT_MODEL, temperature: float = 0.0):
@@ -20,7 +20,7 @@ def invoke_with_retry(model, messages, max_retries: int = 5):
         try:
             return model.invoke(messages)
         except ChatGoogleGenerativeAIError as error:
-            if not _is_rate_limit(error) or attempt == max_retries:
+            if not is_rate_limit(error) or attempt == max_retries:
                 raise
 
             delay = _retry_delay_seconds(error)
@@ -29,7 +29,7 @@ def invoke_with_retry(model, messages, max_retries: int = 5):
             time.sleep(delay)
 
 
-def _is_rate_limit(error) -> bool:
+def is_rate_limit(error) -> bool:
     text = str(error)
     return "429" in text or "RESOURCE_EXHAUSTED" in text
 
