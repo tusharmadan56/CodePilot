@@ -22,6 +22,20 @@ def extract_text(content) -> str:
     return "".join(texts)
 
 
+def describe_tool_call(call) -> str:
+    name = call["name"]
+    args = call["args"]
+    if name == "read_file":
+        return f"reading {args.get('path', '')}"
+    if name == "write_file":
+        return f"editing {args.get('path', '')}"
+    if name == "list_files":
+        return f"listing {args.get('directory', '.')}"
+    if name == "run_command":
+        return f"running: {args.get('cmd', '')}"
+    return f"{name} {args}"
+
+
 def main(task: str, root: str = ".", max_iters: int = 25):
     """Run the CodePilot agent on a task inside the given project directory."""
     load_dotenv()
@@ -32,10 +46,25 @@ def main(task: str, root: str = ".", max_iters: int = 25):
     print(f"Task: {task}")
     print(f"Root: {backend.root}\n")
 
-    result = graph.invoke({"messages": [HumanMessage(task)], "iterations": 0})
+    final_text = ""
+    for chunk in graph.stream({"messages": [HumanMessage(task)], "iterations": 0},
+                              stream_mode="updates"):
+        agent_update = chunk.get("agent")
+        if not agent_update:
+            continue
 
-    final = result["messages"][-1]
-    print(extract_text(final.content))
+        for message in agent_update["messages"]:
+            if getattr(message, "tool_calls", None):
+                for call in message.tool_calls:
+                    print(f"  -> {describe_tool_call(call)}")
+            else:
+                final_text = extract_text(message.content)
+
+    print()
+    if final_text:
+        print(final_text)
+    else:
+        print("(stopped without a final summary - try raising --max-iters)")
 
 
 if __name__ == "__main__":
