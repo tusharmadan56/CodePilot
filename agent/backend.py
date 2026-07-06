@@ -1,5 +1,7 @@
 """Filesystem and shell access, confined to a project root."""
 
+import os
+import signal
 import subprocess
 from pathlib import Path
 from typing import Protocol
@@ -8,6 +10,7 @@ _IGNORED_DIRS = {".git", "node_modules", "__pycache__", "venv", ".venv",
                  ".pytest_cache", ".mypy_cache"}
 
 _MAX_OUTPUT_CHARS = 4000
+_COMMAND_TIMEOUT = 120
 
 
 def _truncate(text: str) -> str:
@@ -19,6 +22,14 @@ def _truncate(text: str) -> str:
     head = text[:half]
     tail = text[-half:]
     return f"{head}\n... [{omitted} characters truncated] ...\n{tail}"
+
+
+def _kill_process_tree(proc):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       capture_output=True)
+    else:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
 
 
 class Backend(Protocol):
@@ -70,13 +81,30 @@ class LocalBackend:
         return "\n".join(files)
 
     def run_command(self, cmd: str) -> str:
-        proc = subprocess.run(
-            cmd, shell=True, cwd=self.root, capture_output=True, text=True
+        proc = subprocess.Popen(
+            cmd, shell=True, cwd=self.root,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=(os.name != "nt"),
         )
 
-        output = (proc.stdout + proc.stderr).strip()
+        timed_out = False
+        try:
+            stdout, stderr = proc.communicate(timeout=_COMMAND_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(proc)
+            stdout, stderr = proc.communicate()
+            timed_out = True
+
+        output = (stdout + stderr).strip()
         if not output:
             output = "(no output)"
-
         output = _truncate(output)
-        return f"$ {cmd}\n{output}\n[exit code: {proc.returncode}]"
+
+        if timed_out:
+            status = f"[timed out after {_COMMAND_TIMEOUT}s]"
+        else:
+            status = f"[exit code: {proc.returncode}]"
+
+        return f"$ {cmd}\n{output}\n{status}"

@@ -24,6 +24,7 @@ Rules:
 - Keep changes minimal and focused; don't refactor unrelated code.
 - Work autonomously - don't ask the user for anything your tools can find out.
 - When a command or edit fails, use the error output to correct yourself and try again.
+- Write the best code for the task, including interactive programs that use input(). You run in a non-interactive terminal, so verify such code by exercising its functions directly with sample values (e.g. python -c "from solver import solve; print(solve(1, 5, 6))") rather than running an entry point that waits for input you can't type.
 
 When the task is complete and verified, stop calling tools and reply with a brief summary of what you changed."""
 
