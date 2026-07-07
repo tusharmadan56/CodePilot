@@ -1,7 +1,5 @@
 """Command-line entrypoint: python agent.py "your task" --root ./project"""
 
-import sys
-
 import typer
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -47,8 +45,8 @@ def main(task: str, root: str = ".", max_iters: int = 25):
     backend = LocalBackend(root)
     graph = build_graph(backend, max_iters)
 
-    print(f"Task: {task}")
-    print(f"Root: {backend.root}\n")
+    typer.secho(f"Task: {task}", bold=True)
+    typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
 
     final_text = ""
     try:
@@ -61,22 +59,23 @@ def main(task: str, root: str = ".", max_iters: int = 25):
             for message in agent_update["messages"]:
                 if getattr(message, "tool_calls", None):
                     for call in message.tool_calls:
-                        print(f"  -> {describe_tool_call(call)}")
+                        typer.secho(f"  -> {describe_tool_call(call)}", fg=typer.colors.CYAN)
                 else:
                     final_text = extract_text(message.content)
     except ChatGoogleGenerativeAIError as error:
         if not is_rate_limit(error):
             raise
-        print(f"\nOut of free-tier quota for {DEFAULT_MODEL}. It resets at midnight "
-              f"Pacific - try again later, or switch models in agent/llm.py.",
-              file=sys.stderr)
+        typer.secho(f"\nOut of free-tier quota for {DEFAULT_MODEL}. It resets at "
+                    f"midnight Pacific - try again later, or switch models in "
+                    f"agent/llm.py.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
     print()
     if final_text:
-        print(final_text)
+        typer.secho(final_text, fg=typer.colors.GREEN)
     else:
-        print("(stopped without a final summary - try raising --max-iters)")
+        typer.secho("(stopped without a final summary - try raising --max-iters)",
+                    fg=typer.colors.YELLOW)
 
 
 if __name__ == "__main__":

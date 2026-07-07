@@ -7,7 +7,7 @@ import time
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def build_llm(model: str = DEFAULT_MODEL, temperature: float = 0.0):
