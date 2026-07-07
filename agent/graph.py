@@ -4,6 +4,7 @@ from typing import Annotated, TypedDict
 
 from langchain_core.messages import BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
@@ -34,7 +35,10 @@ class AgentState(TypedDict):
     iterations: int
 
 
-def build_graph(backend: Backend, max_iters: int = 25):
+def build_graph(backend: Backend, max_iters: int = 25, checkpointer=None):
+    if checkpointer is None:
+        checkpointer = InMemorySaver()
+
     tools = make_tools(backend)
     model = build_llm().bind_tools(tools)
 
@@ -60,4 +64,4 @@ def build_graph(backend: Backend, max_iters: int = 25):
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
     graph.add_edge("tools", "agent")
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

@@ -1,5 +1,7 @@
 """Command-line entrypoint: python agent.py "your task" --root ./project"""
 
+import uuid
+
 import typer
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -48,10 +50,12 @@ def main(task: str, root: str = ".", max_iters: int = 25):
     typer.secho(f"Task: {task}", bold=True)
     typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
 
+    config = {"configurable": {"thread_id": uuid.uuid4().hex}}
+
     final_text = ""
     try:
         for chunk in graph.stream({"messages": [HumanMessage(task)], "iterations": 0},
-                                  stream_mode="updates"):
+                                  config, stream_mode="updates"):
             agent_update = chunk.get("agent")
             if not agent_update:
                 continue
