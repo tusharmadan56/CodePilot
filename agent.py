@@ -41,12 +41,14 @@ def describe_tool_call(call) -> str:
     return f"{name} {args}"
 
 
-def main(task: str, root: str = ".", max_iters: int = 25):
+def main(task: str, root: str = ".", max_iters: int = 25,
+         yes: bool = typer.Option(False, "--yes", "-y",
+                                  help="Auto-approve all writes and commands")):
     """Run the CodePilot agent on a task inside the given project directory."""
     load_dotenv()
 
     backend = LocalBackend(root)
-    graph = build_graph(backend, max_iters, require_approval=True)
+    graph = build_graph(backend, max_iters, require_approval=not yes)
 
     typer.secho(f"Task: {task}", bold=True)
     typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
