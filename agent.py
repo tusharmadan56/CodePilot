@@ -6,6 +6,7 @@ import typer
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
+from langgraph.types import Command
 
 from agent.backend import LocalBackend
 from agent.graph import build_graph
@@ -45,27 +46,41 @@ def main(task: str, root: str = ".", max_iters: int = 25):
     load_dotenv()
 
     backend = LocalBackend(root)
-    graph = build_graph(backend, max_iters)
+    graph = build_graph(backend, max_iters, require_approval=True)
 
     typer.secho(f"Task: {task}", bold=True)
     typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
 
     config = {"configurable": {"thread_id": uuid.uuid4().hex}}
+    stream_input = {"messages": [HumanMessage(task)], "iterations": 0}
 
     final_text = ""
     try:
-        for chunk in graph.stream({"messages": [HumanMessage(task)], "iterations": 0},
-                                  config, stream_mode="updates"):
-            agent_update = chunk.get("agent")
-            if not agent_update:
-                continue
+        while True:
+            interrupted = False
+            for chunk in graph.stream(stream_input, config, stream_mode="updates"):
+                if "__interrupt__" in chunk:
+                    request = chunk["__interrupt__"][0].value
+                    approved = typer.confirm(
+                        typer.style(f"  approve {request}?", fg=typer.colors.YELLOW),
+                        default=True,
+                    )
+                    stream_input = Command(resume=approved)
+                    interrupted = True
+                    break
 
-            for message in agent_update["messages"]:
-                if getattr(message, "tool_calls", None):
-                    for call in message.tool_calls:
-                        typer.secho(f"  -> {describe_tool_call(call)}", fg=typer.colors.CYAN)
-                else:
-                    final_text = extract_text(message.content)
+                agent_update = chunk.get("agent")
+                if not agent_update:
+                    continue
+                for message in agent_update["messages"]:
+                    if getattr(message, "tool_calls", None):
+                        for call in message.tool_calls:
+                            typer.secho(f"  -> {describe_tool_call(call)}", fg=typer.colors.CYAN)
+                    else:
+                        final_text = extract_text(message.content)
+
+            if not interrupted:
+                break
     except ChatGoogleGenerativeAIError as error:
         if not is_rate_limit(error):
             raise

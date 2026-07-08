@@ -35,11 +35,12 @@ class AgentState(TypedDict):
     iterations: int
 
 
-def build_graph(backend: Backend, max_iters: int = 25, checkpointer=None):
+def build_graph(backend: Backend, max_iters: int = 25, checkpointer=None,
+                require_approval: bool = False):
     if checkpointer is None:
         checkpointer = InMemorySaver()
 
-    tools = make_tools(backend)
+    tools = make_tools(backend, require_approval)
     model = build_llm().bind_tools(tools)
 
     def call_model(state: AgentState) -> dict:
