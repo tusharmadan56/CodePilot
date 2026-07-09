@@ -1,9 +1,27 @@
 """Tools the model can call to inspect and edit the project."""
 
+import difflib
+
 from langchain_core.tools import tool
 from langgraph.types import interrupt
 
 from agent.backend import Backend
+
+_MAX_DIFF_LINES = 80
+
+
+def _make_diff(old: str, new: str, path: str) -> str:
+    lines = list(difflib.unified_diff(
+        old.splitlines(), new.splitlines(),
+        fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+    ))
+
+    if len(lines) > _MAX_DIFF_LINES:
+        omitted = len(lines) - _MAX_DIFF_LINES
+        lines = lines[:_MAX_DIFF_LINES]
+        lines.append(f"... ({omitted} more diff lines)")
+
+    return "\n".join(lines)
 
 
 def _safe(func, *args):
@@ -29,8 +47,16 @@ def make_tools(backend: Backend, require_approval: bool = False):
     @tool
     def write_file(path: str, text: str) -> str:
         """Create or overwrite a file. Missing parent directories are created."""
-        if require_approval and not interrupt(f"write file: {path}"):
-            return "The user denied this write."
+        if require_approval:
+            try:
+                old = backend.read_file(path)
+            except Exception:
+                old = ""  # new file
+
+            request = {"action": "write file", "path": path,
+                       "diff": _make_diff(old, text, path)}
+            if not interrupt(request):
+                return "The user denied this write."
         return _safe(backend.write_file, path, text)
 
     @tool

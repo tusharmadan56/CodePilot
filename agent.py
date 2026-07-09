@@ -43,23 +43,43 @@ def describe_tool_call(call) -> str:
     return f"{name} {args}"
 
 
+def print_diff(diff: str):
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            typer.secho(f"  {line}", fg=typer.colors.GREEN)
+        elif line.startswith("-") and not line.startswith("---"):
+            typer.secho(f"  {line}", fg=typer.colors.RED)
+        elif line.startswith("@@"):
+            typer.secho(f"  {line}", fg=typer.colors.CYAN)
+        else:
+            typer.secho(f"  {line}", fg=typer.colors.BRIGHT_BLACK)
+
+
 def answer_interrupt(request):
-    # An approval interrupt carries a plain string; ask_user carries a dict.
-    if not (isinstance(request, dict) and "question" in request):
+    # ask_user sends {question, options}; the write gate sends {action, path, diff};
+    # the command gate sends a plain string.
+    if isinstance(request, dict) and "question" in request:
+        typer.secho(f"\n  {request['question']}", fg=typer.colors.MAGENTA, bold=True)
+        options = request.get("options") or []
+        for number, option in enumerate(options, 1):
+            typer.echo(f"    {number}. {option}")
+
+        raw = typer.prompt("  your choice").strip()
+        if options and raw.isdigit() and 1 <= int(raw) <= len(options):
+            return options[int(raw) - 1]
+        return raw
+
+    if isinstance(request, dict) and "diff" in request:
+        typer.secho(f"\n  {request['action']}: {request['path']}",
+                    fg=typer.colors.YELLOW, bold=True)
+        print_diff(request["diff"])
         return typer.confirm(
-            typer.style(f"  approve {request}?", fg=typer.colors.YELLOW),
-            default=True,
-        )
+            typer.style("  approve?", fg=typer.colors.YELLOW), default=True)
 
-    typer.secho(f"\n  {request['question']}", fg=typer.colors.MAGENTA, bold=True)
-    options = request.get("options") or []
-    for number, option in enumerate(options, 1):
-        typer.echo(f"    {number}. {option}")
-
-    raw = typer.prompt("  your choice").strip()
-    if options and raw.isdigit() and 1 <= int(raw) <= len(options):
-        return options[int(raw) - 1]
-    return raw
+    return typer.confirm(
+        typer.style(f"  approve {request}?", fg=typer.colors.YELLOW),
+        default=True,
+    )
 
 
 def main(task: str, root: str = ".", max_iters: int = 25,
