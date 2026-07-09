@@ -53,3 +53,26 @@ def test_read_rejects_paths_outside_root(backend, path):
 def test_write_rejects_paths_outside_root(backend):
     with pytest.raises(ValueError):
         backend.write_file("../evil.txt", "pwned")
+
+
+def test_edit_replaces_exact_snippet(backend):
+    backend.write_file("calc.py", "def add(a, b):\n    return a - b\n")
+    backend.edit_file("calc.py", "return a - b", "return a + b")
+    assert backend.read_file("calc.py") == "def add(a, b):\n    return a + b\n"
+
+
+def test_edit_rejects_missing_snippet(backend):
+    backend.write_file("calc.py", "def add(a, b):\n    return a + b\n")
+    with pytest.raises(ValueError, match="not found"):
+        backend.edit_file("calc.py", "return a * b", "return a + b")
+
+
+def test_edit_rejects_ambiguous_snippet(backend):
+    backend.write_file("calc.py", "x = 1\nx = 1\n")
+    with pytest.raises(ValueError, match="2 times"):
+        backend.edit_file("calc.py", "x = 1", "x = 2")
+
+
+def test_edit_rejects_paths_outside_root(backend):
+    with pytest.raises(ValueError):
+        backend.edit_file("../evil.txt", "a", "b")

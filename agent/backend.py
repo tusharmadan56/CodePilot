@@ -35,6 +35,7 @@ def _kill_process_tree(proc):
 class Backend(Protocol):
     def read_file(self, path: str) -> str: ...
     def write_file(self, path: str, text: str) -> str: ...
+    def edit_file(self, path: str, old_text: str, new_text: str) -> str: ...
     def list_files(self, directory: str = ".") -> str: ...
     def run_command(self, cmd: str) -> str: ...
 
@@ -60,6 +61,22 @@ class LocalBackend:
         full.parent.mkdir(parents=True, exist_ok=True)
         full.write_text(text, encoding="utf-8")
         return f"wrote {path} ({len(text)} bytes)"
+
+    def edit_file(self, path: str, old_text: str, new_text: str) -> str:
+        full = self._resolve(path)
+        content = full.read_text(encoding="utf-8", errors="replace")
+
+        count = content.count(old_text)
+        if count == 0:
+            raise ValueError(
+                f"text not found in {path} - read the file and copy the snippet exactly")
+        if count > 1:
+            raise ValueError(
+                f"text appears {count} times in {path} - include more surrounding lines to make it unique")
+
+        content = content.replace(old_text, new_text, 1)
+        full.write_text(content, encoding="utf-8")
+        return f"edited {path}"
 
     def list_files(self, directory: str = ".") -> str:
         base = self._resolve(directory)

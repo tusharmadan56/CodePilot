@@ -33,6 +33,8 @@ def describe_tool_call(call) -> str:
     if name == "read_file":
         return f"reading {args.get('path', '')}"
     if name == "write_file":
+        return f"writing {args.get('path', '')}"
+    if name == "edit_file":
         return f"editing {args.get('path', '')}"
     if name == "list_files":
         return f"listing {args.get('directory', '.')}"

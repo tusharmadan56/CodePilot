@@ -60,6 +60,24 @@ def make_tools(backend: Backend, require_approval: bool = False):
         return _safe(backend.write_file, path, text)
 
     @tool
+    def edit_file(path: str, old_text: str, new_text: str) -> str:
+        """Replace one exact snippet in an existing file. old_text must be copied
+        exactly from the file (matching indentation) and must appear exactly once;
+        include surrounding lines to make it unique. Prefer this over write_file
+        for changing existing files."""
+        if require_approval:
+            current = _safe(backend.read_file, path)
+            # Only ask the user when the edit can actually apply; otherwise fall
+            # through and let the backend report the precise problem.
+            if current.count(old_text) == 1:
+                proposed = current.replace(old_text, new_text, 1)
+                request = {"action": "edit file", "path": path,
+                           "diff": _make_diff(current, proposed, path)}
+                if not interrupt(request):
+                    return "The user denied this edit."
+        return _safe(backend.edit_file, path, old_text, new_text)
+
+    @tool
     def run_command(cmd: str) -> str:
         """Run a shell command in the project root. Returns stdout, stderr, and the exit code."""
         if require_approval and not interrupt(f"run command: {cmd}"):
@@ -73,4 +91,4 @@ def make_tools(backend: Backend, require_approval: bool = False):
         answer = interrupt({"question": question, "options": options})
         return f"The user chose: {answer}"
 
-    return [list_files, read_file, write_file, run_command, ask_user]
+    return [list_files, read_file, write_file, edit_file, run_command, ask_user]
