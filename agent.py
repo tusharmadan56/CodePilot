@@ -38,7 +38,28 @@ def describe_tool_call(call) -> str:
         return f"listing {args.get('directory', '.')}"
     if name == "run_command":
         return f"running: {args.get('cmd', '')}"
+    if name == "ask_user":
+        return "asking you a question"
     return f"{name} {args}"
+
+
+def answer_interrupt(request):
+    # An approval interrupt carries a plain string; ask_user carries a dict.
+    if not (isinstance(request, dict) and "question" in request):
+        return typer.confirm(
+            typer.style(f"  approve {request}?", fg=typer.colors.YELLOW),
+            default=True,
+        )
+
+    typer.secho(f"\n  {request['question']}", fg=typer.colors.MAGENTA, bold=True)
+    options = request.get("options") or []
+    for number, option in enumerate(options, 1):
+        typer.echo(f"    {number}. {option}")
+
+    raw = typer.prompt("  your choice").strip()
+    if options and raw.isdigit() and 1 <= int(raw) <= len(options):
+        return options[int(raw) - 1]
+    return raw
 
 
 def main(task: str, root: str = ".", max_iters: int = 25,
@@ -63,11 +84,7 @@ def main(task: str, root: str = ".", max_iters: int = 25,
             for chunk in graph.stream(stream_input, config, stream_mode="updates"):
                 if "__interrupt__" in chunk:
                     request = chunk["__interrupt__"][0].value
-                    approved = typer.confirm(
-                        typer.style(f"  approve {request}?", fg=typer.colors.YELLOW),
-                        default=True,
-                    )
-                    stream_input = Command(resume=approved)
+                    stream_input = Command(resume=answer_interrupt(request))
                     interrupted = True
                     break
 

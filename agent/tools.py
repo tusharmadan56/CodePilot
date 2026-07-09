@@ -40,4 +40,11 @@ def make_tools(backend: Backend, require_approval: bool = False):
             return "The user denied this command."
         return _safe(backend.run_command, cmd)
 
-    return [list_files, read_file, write_file, run_command]
+    @tool
+    def ask_user(question: str, options: list[str]) -> str:
+        """Ask the user to decide something you cannot decide from the project itself,
+        offering 2-4 short options. Use sparingly - make routine choices yourself."""
+        answer = interrupt({"question": question, "options": options})
+        return f"The user chose: {answer}"
+
+    return [list_files, read_file, write_file, run_command, ask_user]
