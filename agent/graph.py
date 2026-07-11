@@ -2,7 +2,8 @@
 
 from typing import Annotated, TypedDict
 
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import (BaseMessage, HumanMessage, SystemMessage,
+                                     ToolMessage)
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.message import add_messages
@@ -14,7 +15,7 @@ from agent.tools import make_tools
 
 SYSTEM_PROMPT = """You are CodePilot, an autonomous coding agent working in a single project directory through a terminal.
 
-Work through every task in this loop:
+Not every message is a coding task. If the user greets you, chats, or asks something that needs no project work, just reply in plain text - no tools. For actual tasks, work through this loop:
 1. Understand - use list_files and read_file to learn the project and the relevant code. Never guess a file's contents.
 2. Plan - decide the smallest change that fully solves the task.
 3. Edit - use edit_file to change existing files (copy the snippet exactly, then replace it) and write_file only for new files or full rewrites. Preserve the existing style; change only what the task needs.
@@ -35,6 +36,27 @@ class AgentState(TypedDict):
     iterations: int
 
 
+_MAX_TRANSCRIPT = 40
+
+
+def _trim(messages: list[BaseMessage]) -> list[BaseMessage]:
+    # Long chat sessions grow the transcript without bound; send the model only
+    # a recent window, cut at a task boundary so no tool result arrives orphaned.
+    if len(messages) <= _MAX_TRANSCRIPT:
+        return messages
+
+    kept = list(messages[-_MAX_TRANSCRIPT:])
+    while kept and not isinstance(kept[0], HumanMessage):
+        kept.pop(0)
+
+    if not kept:  # one giant task fills the window - just avoid orphaned tool results
+        kept = list(messages[-_MAX_TRANSCRIPT:])
+        while kept and isinstance(kept[0], ToolMessage):
+            kept.pop(0)
+
+    return kept
+
+
 def build_graph(backend: Backend, max_iters: int = 25, checkpointer=None,
                 require_approval: bool = False):
     if checkpointer is None:
@@ -44,7 +66,7 @@ def build_graph(backend: Backend, max_iters: int = 25, checkpointer=None,
     model = build_llm().bind_tools(tools)
 
     def call_model(state: AgentState) -> dict:
-        messages = [SystemMessage(SYSTEM_PROMPT)] + state["messages"]
+        messages = [SystemMessage(SYSTEM_PROMPT)] + _trim(state["messages"])
         response = invoke_with_retry(model, messages)
         return {"messages": [response], "iterations": state.get("iterations", 0) + 1}
 

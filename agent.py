@@ -1,6 +1,7 @@
 """Command-line entrypoint: python agent.py "your task" --root ./project"""
 
 import uuid
+from typing import Optional
 
 import typer
 from dotenv import load_dotenv
@@ -84,19 +85,7 @@ def answer_interrupt(request):
     )
 
 
-def main(task: str, root: str = ".", max_iters: int = 25,
-         yes: bool = typer.Option(False, "--yes", "-y",
-                                  help="Auto-approve all writes and commands")):
-    """Run the CodePilot agent on a task inside the given project directory."""
-    load_dotenv()
-
-    backend = LocalBackend(root)
-    graph = build_graph(backend, max_iters, require_approval=not yes)
-
-    typer.secho(f"Task: {task}", bold=True)
-    typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
-
-    config = {"configurable": {"thread_id": uuid.uuid4().hex}}
+def run_task(graph, task: str, config: dict):
     stream_input = {"messages": [HumanMessage(task)], "iterations": 0}
 
     final_text = ""
@@ -136,6 +125,55 @@ def main(task: str, root: str = ".", max_iters: int = 25,
     else:
         typer.secho("(stopped without a final summary - try raising --max-iters)",
                     fg=typer.colors.YELLOW)
+
+
+def chat(graph, root):
+    typer.secho("CodePilot session - type a task, /clear for a fresh thread, "
+                "exit to quit", bold=True)
+    typer.secho(f"Root: {root}\n", fg=typer.colors.BRIGHT_BLACK)
+
+    config = {"configurable": {"thread_id": uuid.uuid4().hex}}
+    while True:
+        try:
+            line = typer.prompt("codepilot", prompt_suffix="> ").strip()
+        except typer.Abort:
+            typer.echo("\nbye")
+            return
+
+        if not line:
+            continue
+        if line.lower() in ("exit", "quit"):
+            typer.echo("bye")
+            return
+        if line == "/clear":
+            config = {"configurable": {"thread_id": uuid.uuid4().hex}}
+            typer.secho("(fresh session started)\n", fg=typer.colors.BRIGHT_BLACK)
+            continue
+
+        try:
+            run_task(graph, line, config)
+        except KeyboardInterrupt:
+            typer.secho("\n(task cancelled - session continues)", fg=typer.colors.YELLOW)
+        print()
+
+
+def main(task: Optional[str] = typer.Argument(None, help="Task to run; omit to start a chat session"),
+         root: str = ".", max_iters: int = 25,
+         yes: bool = typer.Option(False, "--yes", "-y",
+                                  help="Auto-approve all writes and commands")):
+    """Run the CodePilot agent on a task inside the given project directory."""
+    load_dotenv()
+
+    backend = LocalBackend(root)
+    graph = build_graph(backend, max_iters, require_approval=not yes)
+
+    if task is None:
+        chat(graph, backend.root)
+        return
+
+    typer.secho(f"Task: {task}", bold=True)
+    typer.secho(f"Root: {backend.root}\n", fg=typer.colors.BRIGHT_BLACK)
+    run_task(graph, task, {"configurable": {"thread_id": uuid.uuid4().hex}})
 
 
 if __name__ == "__main__":
